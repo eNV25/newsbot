@@ -72,11 +72,10 @@ jobs:
             SET unread = 0;
           EOF
       - name: Delete old cache
-        if: steps.cache.outputs.cache-hit != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh cache delete newsboat-cache
+          gh cache delete newsboat-cache || true
       - uses: actions/cache/save@v6
         with:
           path: ${{ env.XDG_DATA_HOME }}/newsboat/
