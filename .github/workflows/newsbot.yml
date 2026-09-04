@@ -1,0 +1,81 @@
+name: NewsBot
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  newsbot:
+    runs-on: ubuntu-latest
+    environment: newsbot
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: denoland/setup-deno@v2
+      - name: Setup environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y newsboat
+          
+          export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+          echo XDG_CONFIG_HOME="$XDG_CONFIG_HOME" >> $GITHUB_ENV
+          
+          export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+          echo XDG_DATA_HOME="$XDG_DATA_HOME" >> $GITHUB_ENV
+          
+          mkdir -v -p "$XDG_CONFIG_HOME/newsboat/"
+          rsync -v -a ./newsboat/ "$XDG_CONFIG_HOME/newsboat/"
+      - uses: actions/cache/restore@v6
+        id: cache
+        with:
+          path: ${{ env.XDG_DATA_HOME }}/newsboat/
+          key: newsboat-cache
+      - name: Reload newsboat
+        run: |
+          newsboat -x reload
+      - name: Mark old rss items as read
+        run: |
+          sqlite3 "$XDG_DATA_HOME/newsboat/cache.db" <<'EOF'
+            UPDATE rss_item
+            SET unread = 0
+            WHERE feedurl IN (SELECT feedurl FROM rss_item GROUP BY feedurl HAVING min(unread) = 1)
+            AND id NOT IN (SELECT id FROM rss_item GROUP BY feedurl HAVING pubDate = max(pubDate));
+          EOF
+      - name: Send messages
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          sqlite3 -json "$XDG_DATA_HOME/newsboat/cache.db" <<'EOF' |
+            SELECT url, title
+            FROM rss_item
+            WHERE unread = 1
+            ORDER BY pubDate ASC;
+          EOF
+            jq -c '.[]' | while read -r line
+          do
+            jq -r '"<h1><a href=\"\(.url|@html)\">\(.title|@html)</a></h1><time datetime=\(.pubDate|todate)>\(.pubDate|strftime("%b %d, %Y"))</time><details>\(.content)</details>"' |
+              deno run ./sanitize.ts |
+              uvx 'sulguk[cli]' send "$CHAT_ID" /dev/stdin
+          done
+      - name: Mark all rss items as read
+        run: |
+          sqlite3 "$XDG_DATA_HOME/newsboat/cache.db" <<'EOF'
+            UPDATE rss_item
+            SET unread = 0;
+          EOF
+      - name: Delete old cache
+        if: steps.cache.outputs.cache-hit != true
+        run: |
+          gh cache delete newsboat-cache
+      - uses: actions/cache/save@v6
+        with:
+          path: ${{ env.XDG_DATA_HOME }}/newsboat/
+          key: newsboat-cache
