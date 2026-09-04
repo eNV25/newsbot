@@ -21,8 +21,7 @@ jobs:
       - uses: denoland/setup-deno@v2
       - name: Setup environment
         run: |
-          sudo apt-get update
-          sudo apt-get install -y newsboat
+          brew install newsboat
           
           export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
           echo XDG_CONFIG_HOME="$XDG_CONFIG_HOME" >> $GITHUB_ENV
