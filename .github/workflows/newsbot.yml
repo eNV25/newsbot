@@ -73,6 +73,8 @@ jobs:
           EOF
       - name: Delete old cache
         if: steps.cache.outputs.cache-hit != true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh cache delete newsboat-cache
       - uses: actions/cache/save@v6
