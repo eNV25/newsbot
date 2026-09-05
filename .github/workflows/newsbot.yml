@@ -14,10 +14,9 @@ jobs:
     permissions:
       actions: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: DeterminateSystems/determinate-nix-action@v3.22.3
-      - uses: astral-sh/setup-uv@v10.0.1
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@v2.0.5
       - name: Setup environment
         run: |
           export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -37,22 +36,11 @@ jobs:
         run: |
           nix run nixpkgs#newsboat -x reload
       - name: Mark old rss items as read
-        run: |
-          deno run -A ./markOldItemsAsRead.ts
-      - name: Send messages
-        shell: deno run -A --ext ts {0}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: |
-          sqlite3 -json "$XDG_DATA_HOME/newsboat/cache.db" "SELECT id, url, title, pubDate, content FROM rss_item WHERE unread = 1 ORDER BY pubDate ASC;" |
-            jq -c '.[]' |
-            while read -r line
-          do
-            jq -r <<<"$line" '"<h1><a href=\"\(.url|@html)\">\(.title|@html)</a></h1><time datetime=\(.pubDate|todate)>\(.pubDate|gmtime|strftime("%b %d, %Y"))</time><details>\(.content)</details>"' \
-              | deno run ./sanitize.ts | uvx 'sulguk[cli]' send "$CHAT_ID" /dev/stdin
-            sqlite3 "$XDG_DATA_HOME/newsboat/cache.db" "UPDATE rss_item SET unread = 0 WHERE id = $(jq .id <<<"$line")"
-          done
+          deno run -A ./sendMessages.ts
       - name: Delete old cache
         env:
           GH_TOKEN: ${{ github.token }}
