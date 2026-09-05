@@ -1,8 +1,6 @@
 name: NewsBot
 
 on:
-  schedule:
-    - cron: '0 */3 * * *'
   workflow_dispatch:
 
 defaults:
@@ -17,19 +15,17 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v7
-      - uses: Homebrew/actions/setup-homebrew@2026.08.31.1
+      - uses: DeterminateSystems/determinate-nix-action@v3.22.3
       - uses: astral-sh/setup-uv@v10.0.1
       - uses: denoland/setup-deno@v2
       - name: Setup environment
         run: |
-          brew install newsboat
-          
           export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
           echo XDG_CONFIG_HOME="$XDG_CONFIG_HOME" >> $GITHUB_ENV
-          
+
           export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
           echo XDG_DATA_HOME="$XDG_DATA_HOME" >> $GITHUB_ENV
-          
+
           mkdir -v -p "$XDG_CONFIG_HOME/newsboat/"
           rsync -v -a ./newsboat/ "$XDG_CONFIG_HOME/newsboat/"
       - uses: actions/cache/restore@v6
@@ -39,38 +35,24 @@ jobs:
           key: newsboat-cache
       - name: Reload newsboat
         run: |
-          newsboat -x reload
+          nix run nixpkgs#newsboat -x reload
       - name: Mark old rss items as read
         run: |
-          sqlite3 "$XDG_DATA_HOME/newsboat/cache.db" <<'EOF'
-            UPDATE rss_item
-            SET unread = 0
-            WHERE feedurl IN (SELECT feedurl FROM rss_item GROUP BY feedurl HAVING min(unread) = 1)
-            AND id NOT IN (SELECT id FROM rss_item GROUP BY feedurl HAVING pubDate = max(pubDate));
-          EOF
+          deno run -A ./markOldItemsAsRead.ts
       - name: Send messages
+        shell: deno run -A --ext ts {0}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: |
-          sqlite3 -json "$XDG_DATA_HOME/newsboat/cache.db" <<'EOF' |
-            SELECT url, title
-            FROM rss_item
-            WHERE unread = 1
-            ORDER BY pubDate ASC;
-          EOF
-            jq -c '.[]' | while read -r line
+          sqlite3 -json "$XDG_DATA_HOME/newsboat/cache.db" "SELECT id, url, title, pubDate, content FROM rss_item WHERE unread = 1 ORDER BY pubDate ASC;" |
+            jq -c '.[]' |
+            while read -r line
           do
-            jq -r <<<"$line" '"<h1><a href=\"\(.url|@html)\">\(.title|@html)</a></h1><time datetime=\(.pubDate|todate)>\(.pubDate|strftime("%b %d, %Y"))</time><details>\(.content)</details>"' |
-              deno run ./sanitize.ts |
-              uvx 'sulguk[cli]' send "$CHAT_ID" /dev/stdin
+            jq -r <<<"$line" '"<h1><a href=\"\(.url|@html)\">\(.title|@html)</a></h1><time datetime=\(.pubDate|todate)>\(.pubDate|gmtime|strftime("%b %d, %Y"))</time><details>\(.content)</details>"' \
+              | deno run ./sanitize.ts | uvx 'sulguk[cli]' send "$CHAT_ID" /dev/stdin
+            sqlite3 "$XDG_DATA_HOME/newsboat/cache.db" "UPDATE rss_item SET unread = 0 WHERE id = $(jq .id <<<"$line")"
           done
-      - name: Mark all rss items as read
-        run: |
-          sqlite3 "$XDG_DATA_HOME/newsboat/cache.db" <<'EOF'
-            UPDATE rss_item
-            SET unread = 0;
-          EOF
       - name: Delete old cache
         env:
           GH_TOKEN: ${{ github.token }}
