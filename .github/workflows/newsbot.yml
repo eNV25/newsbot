@@ -61,7 +61,7 @@ jobs:
           EOF
             jq -c '.[]' | while read -r line
           do
-            jq -r '"<h1><a href=\"\(.url|@html)\">\(.title|@html)</a></h1><time datetime=\(.pubDate|todate)>\(.pubDate|strftime("%b %d, %Y"))</time><details>\(.content)</details>"' |
+            jq -r <<<"$line" '"<h1><a href=\"\(.url|@html)\">\(.title|@html)</a></h1><time datetime=\(.pubDate|todate)>\(.pubDate|strftime("%b %d, %Y"))</time><details>\(.content)</details>"' |
               deno run ./sanitize.ts |
               uvx 'sulguk[cli]' send "$CHAT_ID" /dev/stdin
           done
