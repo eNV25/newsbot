@@ -34,8 +34,8 @@ jobs:
           key: newsboat-cache
       - name: Reload newsboat
         run: |
-          nix run nixpkgs#newsboat -x reload
-      - name: Mark old rss items as read
+          nix run nixpkgs#newsboat -- -x reload
+      - name: Send messages
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
