@@ -1,6 +1,6 @@
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { escape } from "jsr:@std/html/entities";
-import * as path from "jsr:@std/path";
 
 const homeDir = Deno.env.get("HOME");
 const xdgDataHome = Deno.env.get("XDG_DATA_HOME") ||

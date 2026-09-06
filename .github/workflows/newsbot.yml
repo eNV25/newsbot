@@ -2,12 +2,8 @@ name: NewsBot
 
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: "0 */3 * * *"
   workflow_dispatch:
-
-defaults:
-  run:
-    shell: bash --noprofile --norc -euo pipefail {0}
 
 jobs:
   newsbot:
@@ -29,8 +25,7 @@ jobs:
 
           mkdir -v -p "$XDG_CONFIG_HOME/newsboat/"
           rsync -v -a ./newsboat/ "$XDG_CONFIG_HOME/newsboat/"
-      - uses: actions/cache/restore@v6
-        id: cache
+      - uses: actions/cache/restore@v6.1.0
         with:
           path: ${{ env.XDG_DATA_HOME }}/newsboat/
           key: newsboat-cache
@@ -48,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh cache delete newsboat-cache || true
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@v6.1.0
         with:
           path: ${{ env.XDG_DATA_HOME }}/newsboat/
           key: newsboat-cache
